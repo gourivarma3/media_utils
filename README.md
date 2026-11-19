@@ -50,7 +50,7 @@ classDef VL stroke:#808080,fill:#F2F2F2,stroke-width:2px;
 
 ## Design
 
-media-utils follows a minimal HAL boundary design. The library's responsibility is limited to presenting a stable, well-typed C API through which capture session management is performed; all platform-specific behavior resides in the implementation of this API. The handle-based model means the library allocates and tracks no shared global state visible to callers — each session is represented by its own `RMF_AudioCaptureHandle`, obtained through `Open` or `Open_Type` and released through `Close`. Settings are communicated by value via `RMF_AudioCapture_Settings` structures, so callers can retrieve defaults, modify them, and pass the final configuration to `Start` without the library retaining references.
+media-utils follows a minimal HAL boundary design. This repository exposes the `RMF_AudioCapture_*` C API as a reference build-time stub for platform implementations. Sessions are represented by `RMF_AudioCaptureHandle` values, and settings are passed through `RMF_AudioCapture_Settings*` parameters. The reference stub does not allocate handles, populate settings, or retain these pointers; platform-specific lifecycle and ownership behavior must follow the applicable API contract.
 
 Northbound interaction is entirely through the C API defined in `rmfAudioCapture.h`. `audiocapturemgr` links against `librmfAudioCapture` and drives the full session lifecycle. There is no JSON-RPC, no plugin activation, and no event bus registration at this layer; that coordination belongs to the consumers of this library.
 
@@ -87,9 +87,9 @@ graph TD
 
 #### Threading Model
 
-- **Threading Architecture**: Single-threaded. All API entry points execute synchronously on the calling thread.
-- **Main Thread**: `RMF_AudioCapture_Open`, `RMF_AudioCapture_Open_Type`, `RMF_AudioCapture_GetStatus`, `RMF_AudioCapture_GetDefaultSettings`, `RMF_AudioCapture_GetCurrentSettings`, `RMF_AudioCapture_Start`, `RMF_AudioCapture_Stop`, and `RMF_AudioCapture_Close` each complete synchronously before returning.
-- **Async / Event Dispatch**: Audio data is delivered through the `cbBufferReady` callback registered in `RMF_AudioCapture_Settings` at `Start` time, invoked each time the capture FIFO reaches the configured threshold. An optional `cbStatusChange` callback notifies the caller of state transitions — started, stopped, format changes, or adverse capture events — and may invoke `RMF_AudioCapture_GetStatus()` from within the callback context.
+- **API Call Execution**: The reference implementation executes each entry point synchronously on the calling thread.
+- **Reference Stub Behavior**: The reference implementation does not start worker threads or invoke callbacks.
+- **Vendor Implementations**: Callback dispatch and threading are platform-specific unless guaranteed by the external AudioCapture API contract.
 
 ### Prerequisites and Dependencies
 
@@ -125,7 +125,8 @@ sequenceDiagram
     RMF-->>Caller: RMF_SUCCESS
 
     loop Capture Active
-        HW->>Caller: Data callback with audio buffers
+        HW->>RMF: Audio data available
+        RMF->>Caller: Data callback with audio buffers
     end
 
     Caller->>RMF: RMF_AudioCapture_Stop(handle)
